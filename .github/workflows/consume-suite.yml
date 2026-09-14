@@ -29,6 +29,7 @@ jobs:
       - name: Install verification tools
         run: |
           set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "build-tools;35.0.0"
           echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
       - name: Download and verify channel selection
