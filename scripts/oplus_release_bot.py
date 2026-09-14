@@ -428,6 +428,14 @@ def scan_partition(
         if package not in tracked:
             continue
 
+        if tracked[package].get("required_vendor") == "oplus":
+            manifest = run(["aapt2", "dump", "xmltree", "--file", "AndroidManifest.xml", str(apk)], capture=True).stdout or ""
+            evidence = [line.strip() for line in manifest.splitlines() if re.search(r"com\.(oplus|coloros)\.", line)]
+            if not evidence:
+                raise RuntimeError(f"{package}: no OPlus vendor evidence in APK manifest")
+            for line in evidence[:8]:
+                log("OPlus manifest evidence: " + line)
+
         app_dir = apk.parent
         if app_dir in handled_dirs:
             continue

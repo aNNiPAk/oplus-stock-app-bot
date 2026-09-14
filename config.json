@@ -18,6 +18,73 @@
       "repository": "oplus-calendar",
       "enabled": true,
       "required_certificate_sha256": null
+    },
+    {
+      "package": "com.coloros.note",
+      "repository": "oplus-notes",
+      "enabled": true,
+      "required_certificate_sha256": null,
+      "device": {
+        "partitions": [
+          "my_stock"
+        ]
+      }
+    },
+    {
+      "package": "com.coloros.soundrecorder",
+      "repository": "oplus-recorder",
+      "enabled": true,
+      "required_certificate_sha256": null,
+      "device": {
+        "partitions": [
+          "my_stock"
+        ]
+      }
+    },
+    {
+      "package": "com.coloros.calculator",
+      "repository": "oplus-calculator",
+      "enabled": true,
+      "required_certificate_sha256": null,
+      "device": {
+        "partitions": [
+          "my_stock"
+        ]
+      }
+    },
+    {
+      "package": "com.coloros.weather2",
+      "repository": "oplus-weather",
+      "enabled": true,
+      "required_certificate_sha256": null,
+      "device": {
+        "partitions": [
+          "my_stock"
+        ]
+      }
+    },
+    {
+      "package": "com.coloros.alarmclock",
+      "repository": "oplus-clock",
+      "enabled": true,
+      "required_certificate_sha256": null,
+      "device": {
+        "partitions": [
+          "my_stock"
+        ]
+      }
+    },
+    {
+      "package": "com.android.mms",
+      "repository": "oplus-messages",
+      "enabled": true,
+      "required_certificate_sha256": null,
+      "device": {
+        "partitions": [
+          "my_stock"
+        ]
+      },
+      "required_vendor": "oplus"
     }
   ]
 }
