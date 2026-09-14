@@ -1,0 +1,14 @@
+name: Inspect OPlus stock partition
+on:
+  push:
+    paths: [.github/workflows/inventory-stock.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  inventory:
+    uses: aNNiPAk/oplus-stock-app-bot/.github/workflows/update.yml@main
+    with:
+      inventory: true
+      inventory_partitions: my_stock
+      dry_run: true
