@@ -175,3 +175,19 @@ class SuiteTests(unittest.TestCase):
                 consumer.fetch_json("url")
             self.assertEqual(fetch.call_count, 1)
             sleep.assert_not_called()
+
+    def test_manifest_uses_binary_asset_api_without_forwarding_token(self):
+        import io
+        import os
+        metadata = {"url": "https://api.github.com/repos/owner/repo/releases/assets/1",
+                    "browser_download_url": "https://github.com/web-route"}
+        manifest = {"status": "ok", "apps": {}}
+        with patch.dict(os.environ, {"GH_TOKEN": "private-token"}), \
+             patch.object(consumer.urllib.request, "urlopen", return_value=io.BytesIO(json.dumps(manifest).encode())) as open_url, \
+             patch.object(consumer, "fetch_json") as web_route:
+            self.assertEqual(consumer.fetch_manifest(metadata), manifest)
+            request = open_url.call_args.args[0]
+            self.assertEqual(request.full_url, metadata["url"])
+            self.assertEqual(request.get_header("Accept"), "application/octet-stream")
+            self.assertIsNone(request.get_header("Authorization"))
+            web_route.assert_not_called()
