@@ -1,0 +1,25 @@
+name: Inspect multi-donor pool
+on:
+  push:
+    paths: [.github/workflows/discover-donors.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: List selected OTA donors
+        run: |
+          python - <<'PY'
+          import sys, json
+          sys.path.insert(0, "scripts")
+          import oplus_multi_donor as bot
+          for donor in bot.discover_donors(bot.load_json(bot.DEFAULT_CONFIG), "16", 6):
+              print("DONOR " + json.dumps(bot.public_donor(donor)))
+          PY
