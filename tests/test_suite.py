@@ -182,7 +182,7 @@ class SuiteTests(unittest.TestCase):
         metadata = {"url": "https://api.github.com/repos/owner/repo/releases/assets/1",
                     "browser_download_url": "https://github.com/web-route"}
         manifest = {"status": "ok", "apps": {}}
-        with patch.dict(os.environ, {"GH_TOKEN": "private-token"}), \
+        with patch.dict(os.environ, {"GH_TOKEN": ""}), \
              patch.object(consumer.urllib.request, "urlopen", return_value=io.BytesIO(json.dumps(manifest).encode())) as open_url, \
              patch.object(consumer, "fetch_json") as web_route:
             self.assertEqual(consumer.fetch_manifest(metadata), manifest)
@@ -191,3 +191,28 @@ class SuiteTests(unittest.TestCase):
             self.assertEqual(request.get_header("Accept"), "application/octet-stream")
             self.assertIsNone(request.get_header("Authorization"))
             web_route.assert_not_called()
+
+    def test_authenticated_metadata_uses_cli_api_without_web_route(self):
+        import os
+        import subprocess
+        url = "https://api.github.com/repos/aNNiPAk/oplus-stock-app-bot/releases"
+        result = subprocess.CompletedProcess([], 0, json.dumps([{"tag_name": "suite-test"}]), "")
+        with patch.dict(os.environ, {"GH_TOKEN": "private-token"}), \
+             patch.object(consumer.multi, "run", return_value=result) as cli, \
+             patch.object(consumer.multi, "http_json") as web:
+            self.assertEqual(consumer.fetch_json(url), [{"tag_name": "suite-test"}])
+            self.assertEqual(cli.call_args.args[0], ["gh", "api", url])
+            web.assert_not_called()
+
+    def test_authenticated_manifest_uses_cli_binary_api(self):
+        import os
+        import subprocess
+        metadata = {"url": "https://api.github.com/repos/aNNiPAk/oplus-stock-app-bot/releases/assets/1"}
+        manifest = {"status": "ok", "apps": {}}
+        result = subprocess.CompletedProcess([], 0, json.dumps(manifest), "")
+        with patch.dict(os.environ, {"GH_TOKEN": "private-token"}), \
+             patch.object(consumer.multi, "run", return_value=result) as cli, \
+             patch.object(consumer.urllib.request, "urlopen") as web:
+            self.assertEqual(consumer.fetch_manifest(metadata), manifest)
+            self.assertEqual(cli.call_args.args[0], ["gh", "api", metadata["url"], "-H", "Accept: application/octet-stream"])
+            web.assert_not_called()
