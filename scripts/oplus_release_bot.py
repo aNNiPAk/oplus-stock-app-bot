@@ -271,7 +271,8 @@ def extract_partition(source_url: str, partition: str) -> Path | None:
         try:
             run(
                 [
-                    "payload-dumper",
+                    sys.executable,
+                    str(ROOT / "scripts" / "dump_payload.py"),
                     direct_url,
                     "-p",
                     partition,
@@ -430,7 +431,7 @@ def scan_partition(
         cert = apk_certificate(apk)
         apk_hash = sha256_file(apk)
         version_part = safe_filename_part(version_name)
-        staged_name = f"{package}_{version_part}_{version_code}.apk"
+        staged_name = f"{package}_{version_part}_{version_code}_{apk_hash[:12]}.apk"
         staged_path = STAGED / staged_name
         shutil.copy2(apk, staged_path)
 
