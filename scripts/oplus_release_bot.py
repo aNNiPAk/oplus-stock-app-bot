@@ -121,6 +121,11 @@ def load_config() -> dict[str, Any]:
         seen_packages.add(package)
         seen_repositories.add(repository)
 
+    target = os.environ.get("APP_REPOSITORY", "").strip()
+    if target:
+        apps = [app for app in apps if app["repository"] == target]
+        if not apps:
+            raise ValueError(f"Unknown APP_REPOSITORY: {target}")
     data["apps"] = apps
     return data
 
@@ -408,6 +413,10 @@ def scan_partition(
         try:
             package, version_name, version_code = parse_apk(apk)
         except Exception:
+            continue
+
+        if os.environ.get("INVENTORY", "false").lower() == "true":
+            log(f"INVENTORY {package} | {version_name} | {version_code} | {partition}/{apk.relative_to(root).as_posix()}")
             continue
 
         if package not in tracked:
@@ -736,7 +745,7 @@ def main() -> int:
         problems: list[str] = report["problems"]
 
         for partition in partitions:
-            if len(candidates) == len(tracked):
+            if os.environ.get("INVENTORY", "false").lower() != "true" and len(candidates) == len(tracked):
                 log("All tracked packages were found; remaining partitions are skipped")
                 break
 
@@ -762,6 +771,11 @@ def main() -> int:
             package: asdict(candidate)
             for package, candidate in candidates.items()
         }
+
+        if os.environ.get("INVENTORY", "false").lower() == "true":
+            report["status"] = "inventory-complete"
+            write_report(report)
+            return 0
 
         missing = sorted(set(tracked) - set(candidates))
         for package in missing:

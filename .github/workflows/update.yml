@@ -11,6 +11,10 @@ on:
       - .github/workflows/update.yml
   workflow_call:
     inputs:
+      app_repository:
+        required: false
+        type: string
+        default: ""
       allow_publication:
         description: Allow publication from an explicitly configured caller workflow
         required: false
@@ -95,6 +99,8 @@ jobs:
 
       - name: Run updater
         env:
+          APP_REPOSITORY: ${{ inputs.app_repository }}
+          INVENTORY: ${{ github.repository == 'aNNiPAk/oplus-stock-app-bot' && github.event_name == 'push' }}
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
           TARGET_OWNER: ${{ vars.TARGET_OWNER || github.repository_owner }}
           OTA_URL_OVERRIDE: ${{ inputs.ota_url_override }}
