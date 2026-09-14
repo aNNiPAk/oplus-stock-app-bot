@@ -1,0 +1,23 @@
+{
+  "device": {
+    "model": "RMX5131",
+    "catalog_region": null,
+    "partitions": [
+      "my_product",
+      "product",
+      "my_region",
+      "system_ext",
+      "system",
+      "my_stock",
+      "my_heytap"
+    ]
+  },
+  "apps": [
+    {
+      "package": "com.oplus.calendar",
+      "repository": "oplus-calendar",
+      "enabled": true,
+      "required_certificate_sha256": null
+    }
+  ]
+}
