@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 import re
+import threading
+from collections import OrderedDict
 
 from payload_dumper.source import ByteSource, SourceError
 
@@ -34,6 +36,11 @@ class RangeHttpSource(ByteSource):
         import httpx
 
         self._url = url
+        self._cache = OrderedDict()
+        self._cache_lock = threading.Lock()
+        self._block_size = 4 * 1024 * 1024
+        self._requests = 0
+        self._bytes = 0
         self._client = client or httpx.Client(
             follow_redirects=True,
             timeout=60,
@@ -64,22 +71,47 @@ class RangeHttpSource(ByteSource):
             raise SourceError(f"OTA server returned wrong range: {content_range!r}; expected {start}-{end}")
         return int(match[3])
 
-    def read_at(self, offset: int, length: int) -> bytes:
-        if length <= 0 or offset >= self._size:
-            return b""
-        end = min(offset + length, self._size) - 1
-        with self._client.stream("GET", self._url, headers={"Range": f"bytes={offset}-{end}"}) as response:
-            if self._check_range(response, offset, end) != self._size:
+    def _fetch(self, start: int, end: int) -> bytes:
+        with self._client.stream("GET", self._url, headers={"Range": f"bytes={start}-{end}"}) as response:
+            if self._check_range(response, start, end) != self._size:
                 raise SourceError("OTA archive size changed while extracting")
             data = response.read()
-        if len(data) != end - offset + 1:
+        if len(data) != end - start + 1:
             raise SourceError("OTA server returned a truncated range")
+        self._requests += 1
+        self._bytes += len(data)
         return data
+
+    def read_at(self, offset: int, length: int) -> bytes:
+        if offset < 0:
+            raise SourceError("Negative OTA offset")
+        if length <= 0 or offset >= self._size:
+            return b""
+        end = min(offset + length, self._size)
+        chunks = []
+        # Bounded LRU combines neighboring operation reads; hashes are still
+        # verified by payload-dumper. Lock preserves ByteSource thread safety.
+        with self._cache_lock:
+            while offset < end:
+                start = offset // self._block_size * self._block_size
+                data = self._cache.get(start)
+                if data is None:
+                    data = self._fetch(start, min(start + self._block_size, self._size) - 1)
+                    self._cache[start] = data
+                    if len(self._cache) > 8:
+                        self._cache.popitem(last=False)
+                self._cache.move_to_end(start)
+                count = min(end - offset, len(data) - (offset - start))
+                chunks.append(data[offset - start:offset - start + count])
+                offset += count
+        return b"".join(chunks)
 
     def size(self) -> int:
         return self._size
 
     def close(self) -> None:
+        print(f"OTA reads: {self._requests} requests, {self._bytes} bytes; cache limit 32 MiB", flush=True)
+        self._cache.clear()
         self._client.close()
 
 

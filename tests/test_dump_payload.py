@@ -86,3 +86,44 @@ class SignedURLTests(unittest.TestCase):
         client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, content=b"entire archive")))
         with self.assertRaisesRegex(Exception, "ignored HTTP Range"):
             adapter.RangeHttpSource("https://example.org/ota.zip", client=client)
+
+
+class BufferedRangeTests(unittest.TestCase):
+    def source(self):
+        import httpx
+        self.data = bytes(range(256)) * 100
+        self.requests = []
+        def respond(request):
+            start, end = map(int, request.headers["Range"].removeprefix("bytes=").split("-"))
+            self.requests.append((start, end))
+            return httpx.Response(206, headers={"Content-Range": f"bytes {start}-{end}/{len(self.data)}"},
+                                  content=self.data[start:end + 1])
+        source = adapter.RangeHttpSource("https://example.org/ota", client=httpx.Client(transport=httpx.MockTransport(respond)))
+        source._block_size = 1024
+        self.addCleanup(source.close)
+        return source
+
+    def test_neighboring_reads_share_request_and_cross_block_is_exact(self):
+        source = self.source()
+        for offset in range(100):
+            self.assertEqual(source.read_at(offset, 4), self.data[offset:offset + 4])
+        self.assertEqual(len(self.requests), 2)  # probe plus one cached block
+        self.assertEqual(source.read_at(1000, 100), self.data[1000:1100])
+        self.assertEqual(len(self.requests), 3)
+
+    def test_cache_is_bounded_and_evicted_blocks_can_be_read_again(self):
+        source = self.source()
+        for offset in range(0, 12 * 1024, 1024):
+            self.assertEqual(source.read_at(offset, 10), self.data[offset:offset + 10])
+        self.assertEqual(len(source._cache), 8)
+        self.assertEqual(source.read_at(0, 10), self.data[:10])
+        self.assertEqual(source.read_at(len(self.data) - 3, 100), self.data[-3:])
+
+    def test_changed_size_is_rejected_for_cached_block_fetch(self):
+        import httpx
+        source = self.source()
+        source._client.close()
+        source._client = httpx.Client(transport=httpx.MockTransport(lambda req: httpx.Response(
+            206, headers={"Content-Range": "bytes 0-1023/99999"}, content=b"x" * 1024)))
+        with self.assertRaisesRegex(Exception, "size changed"):
+            source.read_at(0, 10)

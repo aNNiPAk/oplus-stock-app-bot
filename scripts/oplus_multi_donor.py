@@ -575,18 +575,7 @@ def inspect_donor(
     if candidate is None:
         log(f"NOTICE: {package_name} not found in {donor.device}/{donor.region}")
         return None
-    if candidate.classification != "stable":
-        for partition in overlay_partitions:
-            if partition in visited:
-                continue
-            try:
-                image = extract_partition(donor, partition)
-                if image is not None:
-                    root = unpack_image(image, donor, partition)
-                    if root is not None:
-                        inspect_overlays(root, partition)
-            finally:
-                transport.cleanup_partition(partition)
+    # Overlays are diagnostic only: never extract extra partitions for them.
     candidate.overlays = sorted(set(overlays))
     candidate.overlay_locales = sorted(overlay_locales)
     return candidate
@@ -806,6 +795,7 @@ def main() -> int:
 
         candidates: list[Candidate] = []
         for donor in donors:
+            started = time.monotonic()
             try:
                 candidate = inspect_donor(
                     donor,
@@ -824,6 +814,8 @@ def main() -> int:
                 report["errors"].append(message)
                 log("WARNING: " + message)
                 cleanup_donor(donor)
+            finally:
+                log(f"Donor scan finished: {donor.device}/{donor.region}, {time.monotonic() - started:.1f}s")
 
         report["candidates"] = [public_candidate(x) for x in candidates]
         if not candidates:
