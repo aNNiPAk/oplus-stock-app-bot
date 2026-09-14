@@ -7,6 +7,12 @@
 По умолчанию проект настроен на **realme 16 Pro+ RMX5131** и отслеживает:
 
 - `com.oplus.calendar` → репозиторий `oplus-calendar`
+- `com.coloros.note` → репозиторий `oplus-notes`
+- `com.coloros.soundrecorder` → репозиторий `oplus-recorder`
+- `com.coloros.calculator` → репозиторий `oplus-calculator`
+- `com.coloros.weather2` → репозиторий `oplus-weather`
+- `com.coloros.alarmclock` → репозиторий `oplus-clock`
+- `com.android.mms` → репозиторий `oplus-messages`
 
 Владелец целевого репозитория автоматически берётся из владельца центрального bot-репозитория. При необходимости можно задать GitHub Repository Variable `TARGET_OWNER`.
 
@@ -35,13 +41,13 @@ scripts/bootstrap_target_repos.sh private
 
 Скрипт создаст недостающие private-репозитории из `config.json` и добавит первый README, чтобы у репозитория была default branch.
 
-Можно передать `public`, но системные APK являются проприетарными файлами производителя: перед публичной публикацией стоит проверить условия их распространения. Для личного Obtainium-канала private repositories безопаснее с точки зрения распространения.
+Для публичных каналов передайте `public`.
 
 ## 2. Публикация без отдельного токена
 
-В `aNNiPAk/oplus-calendar` установлен workflow, который вызывает reusable workflow этого bot-репозитория. Код извлекается из `aNNiPAk/oplus-stock-app-bot`, а встроенный `GITHUB_TOKEN` принадлежит `oplus-calendar` и имеет `Contents: write` для публикации его релизов.
+В каждом целевом репозитории установлен workflow, который вызывает reusable workflow этого bot-репозитория с `app_repository`. Код извлекается из `aNNiPAk/oplus-stock-app-bot`, а встроенный `GITHUB_TOKEN` принадлежит целевому репозиторию и имеет `Contents: write` для публикации его релизов. Выбор канала ограничивает извлечение и публикацию одним пакетом.
 
-Для текущего приложения PAT и секрет `RELEASE_TOKEN` не нужны.
+PAT и секрет `RELEASE_TOKEN` для этих каналов не нужны.
 
 ## 3. Запуск
 
@@ -49,7 +55,7 @@ scripts/bootstrap_target_repos.sh private
 
 Публикация: тот же workflow с `dry_run = false`. Также workflow календаря выполняет обновление каждый день.
 
-В bot-репозитории изменения кода, конфигурации и workflow запускают dry-run. Поле `ota_url_override` позволяет указать прямой Full OTA URL вместо автоматического поиска.
+В bot-репозитории изменения кода, конфигурации и workflow запускают dry-run календаря. Поле `ota_url_override` позволяет указать прямой Full OTA URL вместо автоматического поиска.
 
 Опциональный `RELEASE_TOKEN` нужен только при запуске публикации из bot-репозитория в другой repository. Он должен иметь `Contents: Read and write` для target repository.
 
@@ -156,3 +162,9 @@ scripts/bootstrap_target_repos.sh private
 - OPlus может менять OTA endpoints и правила `downloadCheck`.
 - OTA catalog является сторонним индексом; APK при этом извлекается из OPlus source URL, сохранённого в catalog.
 - Если разные регионы имеют разные signing keys, используйте конкретный `catalog_region` и/или `required_certificate_sha256`.
+
+## Дополнительные каналы и инвентаризация
+
+Новые приложения найдены в `my_stock`; их конфигурация использует только этот раздел. `oplus-messages` принимает `com.android.mms` с проверкой OPlus/ColorOS в манифесте. Google Messages исключён.
+
+Вызов reusable workflow с `inventory: true` читает пакеты, версии и пути APK, сохраняет их в отчёт и не публикует релизы. `inventory_model`, `inventory_region` и `inventory_partitions` позволяют проверить отдельный источник OTA. Эти параметры применяются только при инвентаризации.
