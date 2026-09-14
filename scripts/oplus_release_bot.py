@@ -384,7 +384,7 @@ def apk_certificate(apk: Path) -> str:
     )
     match = CERT_RE.search(result.stdout or "")
     if not match:
-        raise RuntimeError(f"Could not read signing certificate: {apk}")
+        raise RuntimeError(f"Could not read signing certificate: {apk}; apksigner output: {result.stdout}; stderr: {result.stderr}")
     return match.group(1).strip().lower()
 
 
