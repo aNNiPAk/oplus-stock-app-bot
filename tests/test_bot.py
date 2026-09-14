@@ -13,6 +13,20 @@ spec.loader.exec_module(bot)
 
 
 class BotTests(unittest.TestCase):
+    def test_unknown_channel_is_rejected(self):
+        with patch.dict(bot.os.environ, {"APP_REPOSITORY": "oplus-unknown"}):
+            with self.assertRaisesRegex(ValueError, "Unknown APP_REPOSITORY"):
+                bot.load_config()
+
+    def test_selected_channel_excludes_other_apps(self):
+        config = {"device": {"model": "RMX5131"}, "apps": [
+            {"package": "com.oplus.calendar", "repository": "oplus-calendar"},
+            {"package": "com.coloros.note", "repository": "oplus-notes"},
+        ]}
+        with patch.object(bot.json, "load", return_value=config), patch.dict(bot.os.environ, {"APP_REPOSITORY": "oplus-calendar"}):
+            selected = bot.load_config()
+            self.assertEqual([app["package"] for app in selected["apps"]], ["com.oplus.calendar"])
+
     def test_wrong_model_is_rejected(self):
         with patch.object(bot, "http_json", return_value=[{"model": "RMX9999", "source_url": "https://example.org/ota"}]):
             with self.assertRaisesRegex(RuntimeError, "No OTA catalog entry"):

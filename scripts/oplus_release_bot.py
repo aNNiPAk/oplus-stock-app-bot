@@ -126,6 +126,7 @@ def load_config() -> dict[str, Any]:
         apps = [app for app in apps if app["repository"] == target]
         if not apps:
             raise ValueError(f"Unknown APP_REPOSITORY: {target}")
+        data["device"] = {**data["device"], **apps[0].get("device", {})}
     data["apps"] = apps
     return data
 
@@ -406,6 +407,7 @@ def scan_partition(
     tracked: dict[str, dict[str, Any]],
     candidates: dict[str, AppCandidate],
     problems: list[str],
+    inventory: list[dict[str, Any]] | None = None,
 ) -> None:
     handled_dirs: set[Path] = set()
 
@@ -417,6 +419,10 @@ def scan_partition(
 
         if os.environ.get("INVENTORY", "false").lower() == "true":
             log(f"INVENTORY {package} | {version_name} | {version_code} | {partition}/{apk.relative_to(root).as_posix()}")
+            if inventory is not None:
+                inventory.append({"package": package, "version_name": version_name,
+                                  "version_code": version_code, "partition": partition,
+                                  "firmware_path": apk.relative_to(root).as_posix()})
             continue
 
         if package not in tracked:
@@ -697,6 +703,7 @@ def main() -> int:
         "candidates": {},
         "releases": [],
         "problems": [],
+        "inventory": [],
     }
 
     try:
@@ -705,7 +712,12 @@ def main() -> int:
         device = config["device"]
         model = str(device["model"])
         region = device.get("catalog_region")
+        if os.environ.get("INVENTORY", "false").lower() == "true":
+            model = os.environ.get("INVENTORY_MODEL", "").strip() or model
+            region = os.environ.get("INVENTORY_REGION", "").strip() or region
         partitions = list(device.get("partitions") or [])
+        if os.environ.get("INVENTORY", "false").lower() == "true" and os.environ.get("INVENTORY_PARTITIONS"):
+            partitions = os.environ["INVENTORY_PARTITIONS"].split(",")
         if not partitions:
             raise ValueError("config.json: device.partitions must not be empty")
 
@@ -763,6 +775,7 @@ def main() -> int:
                     tracked,
                     candidates,
                     problems,
+                    report["inventory"],
                 )
 
             cleanup_partition(partition)

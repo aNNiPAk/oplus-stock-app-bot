@@ -1,0 +1,16 @@
+name: Inspect Chinese OPlus apps
+on:
+  push:
+    paths: [.github/workflows/inventory-cn.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  inventory:
+    uses: aNNiPAk/oplus-stock-app-bot/.github/workflows/update.yml@main
+    with:
+      inventory: true
+      inventory_model: PLK110
+      inventory_region: CN
+      inventory_partitions: my_stock,my_product,my_heytap
+      dry_run: true
