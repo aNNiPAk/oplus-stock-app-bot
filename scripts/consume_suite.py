@@ -5,6 +5,8 @@ import json
 import os
 import shutil
 import sys
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -14,8 +16,23 @@ from publish_multi_report import publish_report, verified_candidate
 CENTRAL = "aNNiPAk/oplus-stock-app-bot"
 
 
+def fetch_json(url):
+    for attempt in range(3):
+        try:
+            return multi.http_json(url)
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (429, 500, 502, 503, 504) or attempt == 2:
+                raise
+            multi.log(f"Metadata HTTP {exc.code}; retry {attempt + 1}/2")
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 2:
+                raise
+            multi.log(f"Metadata network timeout; retry {attempt + 1}/2")
+        time.sleep(2 ** (attempt + 1))
+
+
 def latest_bundle():
-    releases = multi.http_json(f"https://api.github.com/repos/{CENTRAL}/releases?per_page=100")
+    releases = fetch_json(f"https://api.github.com/repos/{CENTRAL}/releases?per_page=100")
     bundles = [r for r in releases if not r["draft"] and r["prerelease"] and r["tag_name"].startswith("suite-")]
     if not bundles:
         raise RuntimeError("No completed suite bundle exists yet; run the central suite workflow first")
@@ -36,7 +53,7 @@ def check_update(package):
     metadata = next((a for a in release["assets"] if a["name"] == "suite-manifest.json" and a["state"] == "uploaded"), None)
     if not metadata:
         raise RuntimeError("Suite bundle has no manifest")
-    report = channel_report(multi.http_json(metadata["browser_download_url"]), package, os.environ["GITHUB_REPOSITORY"])
+    report = channel_report(fetch_json(metadata["browser_download_url"]), package, os.environ["GITHUB_REPOSITORY"])
     stable, experimental = multi.current_release_codes(report["repository"])
     changed = any(data and data["version_code"] > (stable if channel == "stable" else max(stable, experimental))
                   for channel, data in report["selection"].items())
@@ -60,7 +77,7 @@ def consume(package, dry_run=False):
     metadata = assets.get("suite-manifest.json")
     if not metadata:
         raise RuntimeError("Suite bundle has no manifest")
-    manifest = multi.http_json(metadata["browser_download_url"])
+    manifest = fetch_json(metadata["browser_download_url"])
     report = channel_report(manifest, package, os.environ["GITHUB_REPOSITORY"])
     multi.STAGED.mkdir(parents=True, exist_ok=True)
     stable, experimental = multi.current_release_codes(report["repository"])
