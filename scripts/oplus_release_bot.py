@@ -480,8 +480,15 @@ def get_latest_release_apk(repo: str, temp_dir: Path) -> Path | None:
     )
     if view.returncode != 0:
         error = (view.stderr or "").strip()
-        if "no releases found" in error.lower():
-            return None
+        listing = run(
+            ["gh", "api", f"repos/{repo}/releases?per_page=1"],
+            check=False,
+            capture=True,
+        )
+        if listing.returncode == 0:
+            releases = json.loads(listing.stdout or "null")
+            if releases == []:
+                return None
         raise RuntimeError(f"{repo}: could not read latest release: {error}")
 
     shutil.rmtree(temp_dir, ignore_errors=True)

@@ -30,9 +30,17 @@ class BotTests(unittest.TestCase):
                 bot.get_latest_release_apk("aNNiPAk/oplus-calendar", Path("unused"))
 
     def test_no_releases_is_allowed(self):
-        failure = subprocess.CompletedProcess([], 1, "", "no releases found")
-        with patch.object(bot, "run", return_value=failure):
+        failure = subprocess.CompletedProcess([], 1, "", "release not found")
+        empty = subprocess.CompletedProcess([], 0, "[]", "")
+        with patch.object(bot, "run", side_effect=[failure, empty]):
             self.assertIsNone(bot.get_latest_release_apk("aNNiPAk/oplus-calendar", Path("unused")))
+
+    def test_missing_latest_with_existing_releases_is_not_first_release(self):
+        failure = subprocess.CompletedProcess([], 1, "", "release not found")
+        releases = subprocess.CompletedProcess([], 0, '[{"tag_name":"v1"}]', "")
+        with patch.object(bot, "run", side_effect=[failure, releases]):
+            with self.assertRaisesRegex(RuntimeError, "could not read latest release"):
+                bot.get_latest_release_apk("aNNiPAk/oplus-calendar", Path("unused"))
 
     def test_missing_apk_fails_dry_run(self):
         with tempfile.TemporaryDirectory() as directory:

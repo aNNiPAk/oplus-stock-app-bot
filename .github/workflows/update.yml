@@ -107,3 +107,12 @@ jobs:
           path: .work/report.json
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Upload extracted APK for review
+        if: always() && (github.event_name == 'push' || inputs.dry_run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: oplus-stock-app-dry-run-apk
+          path: .work/staged/*.apk
+          if-no-files-found: ignore
+          retention-days: 7
