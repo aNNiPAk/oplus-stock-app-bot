@@ -154,3 +154,24 @@ class SuiteTests(unittest.TestCase):
             self.assertEqual(values[0].overlay_locales, ["ru"])
             self.assertEqual(values[0].overlays, ["my_stock/overlay.apk"])
             self.assertEqual(extract.call_count, 1)
+
+    def test_transient_metadata_504_is_retried_without_ota_extraction(self):
+        import urllib.error
+        failure = urllib.error.HTTPError("url", 504, "Gateway timeout", {}, None)
+        with patch.object(consumer.multi, "http_json", side_effect=[failure, {"ok": True}]) as fetch, \
+             patch.object(consumer.time, "sleep") as sleep, \
+             patch.object(suite, "extract_once") as extract:
+            self.assertEqual(consumer.fetch_json("url"), {"ok": True})
+            self.assertEqual(fetch.call_count, 2)
+            sleep.assert_called_once_with(2)
+            extract.assert_not_called()
+
+    def test_non_transient_metadata_404_is_not_retried(self):
+        import urllib.error
+        failure = urllib.error.HTTPError("url", 404, "Missing", {}, None)
+        with patch.object(consumer.multi, "http_json", side_effect=failure) as fetch, \
+             patch.object(consumer.time, "sleep") as sleep:
+            with self.assertRaises(urllib.error.HTTPError):
+                consumer.fetch_json("url")
+            self.assertEqual(fetch.call_count, 1)
+            sleep.assert_not_called()
