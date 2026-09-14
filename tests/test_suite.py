@@ -131,3 +131,26 @@ class SuiteTests(unittest.TestCase):
                  patch.object(consumer.multi, "current_release_codes", return_value=(10, 11)):
                 self.assertEqual(consumer.check_update("a"), 0)
             self.assertEqual(output.read_text(), "changed=true\n")
+
+    def test_russian_overlay_is_diagnostic_and_does_not_promote_base_apk(self):
+        candidate = suite.multi.Candidate("a", "1", 1, self.donor(), "my_stock", "a.apk", "a.apk",
+                                          "hash", "cert", locales=["en"], classification="experimental")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.apk").touch()
+            (root / "overlay.apk").touch()
+            def badging(apk):
+                return f"package: name='{apk.stem}' versionCode='1' versionName='1'\nlocales: 'ru'"
+            with patch.object(suite, "load_cache", return_value=None), \
+                 patch.object(suite, "save_cache"), \
+                 patch.object(suite, "extract_once", return_value=root) as extract, \
+                 patch.object(suite.multi, "aapt_badging", side_effect=badging), \
+                 patch.object(suite.multi, "overlay_target", return_value="a"), \
+                 patch.object(suite, "make_candidate", return_value=candidate), \
+                 patch.object(suite.multi.transport, "cleanup_partition"):
+                values, errors = suite.scan_donor(self.donor(), {"a"}, {"package_partitions": {"a": ["my_stock"]}})
+            self.assertEqual(errors, [])
+            self.assertEqual(values[0].classification, "experimental")
+            self.assertEqual(values[0].overlay_locales, ["ru"])
+            self.assertEqual(values[0].overlays, ["my_stock/overlay.apk"])
+            self.assertEqual(extract.call_count, 1)
