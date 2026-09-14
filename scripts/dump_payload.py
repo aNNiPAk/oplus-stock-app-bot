@@ -8,6 +8,25 @@ import re
 from payload_dumper.source import ByteSource, SourceError
 
 
+def fix_manifest_schema():
+    """Modern OTA offsets are uint64; upstream 2.3.0 uses legacy uint32."""
+    from google.protobuf import descriptor_pb2, descriptor_pool, message_factory
+    from payload_dumper import update_metadata_pb2
+
+    schema = descriptor_pb2.FileDescriptorProto()
+    schema.ParseFromString(update_metadata_pb2.DESCRIPTOR.serialized_pb)
+    operation = next(message for message in schema.message_type if message.name == "InstallOperation")
+    for field in operation.field:
+        if field.name in {"data_offset", "data_length"}:
+            field.type = descriptor_pb2.FieldDescriptorProto.TYPE_UINT64
+    pool = descriptor_pool.DescriptorPool()
+    pool.AddSerializedFile(schema.SerializeToString())
+    name = update_metadata_pb2.DeltaArchiveManifest.DESCRIPTOR.full_name
+    manifest_type = message_factory.GetMessageClass(pool.FindMessageTypeByName(name))
+    update_metadata_pb2.DeltaArchiveManifest = manifest_type
+    return manifest_type
+
+
 class RangeHttpSource(ByteSource):
     """Use Content-Range for size; Content-Length describes only the slice."""
 
@@ -82,6 +101,7 @@ def open_ota_source(target: str):
 def main() -> int:
     from payload_dumper import cli
 
+    fix_manifest_schema()
     cli.open_source = open_ota_source
     return cli.main()
 

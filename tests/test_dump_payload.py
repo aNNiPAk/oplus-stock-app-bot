@@ -13,6 +13,31 @@ spec.loader.exec_module(adapter)
 
 
 class SignedURLTests(unittest.TestCase):
+    def test_modern_manifest_preserves_offsets_above_four_gib(self):
+        import struct
+        from payload_dumper.core import parse_payload
+
+        manifest_type = adapter.fix_manifest_schema()
+        manifest = manifest_type()
+        manifest.minor_version = 9
+        partition = manifest.partitions.add()
+        partition.partition_name = "my_product"
+        operation = partition.operations.add()
+        operation.type = 0
+        operation.data_offset = 5 * 1024 ** 3 + 123
+        operation.data_length = 6 * 1024 ** 3 + 456
+        serialized = manifest.SerializeToString()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "payload.bin"
+            path.write_bytes(b"CrAU" + struct.pack(">QQI", 2, len(serialized), 0) + serialized)
+            source = FileSource(str(path))
+            try:
+                parsed = parse_payload(source).manifest.partitions[0].operations[0]
+                self.assertEqual(parsed.data_offset, operation.data_offset)
+                self.assertEqual(parsed.data_length, operation.data_length)
+            finally:
+                source.close()
+
     def test_signed_zip_is_unwrapped_without_changing_url(self):
         with tempfile.TemporaryDirectory() as directory:
             archive = Path(directory) / "ota.zip"
