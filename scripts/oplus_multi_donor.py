@@ -774,6 +774,7 @@ def main() -> int:
     report: dict[str, Any] = {
         "status": "running",
         "package": args.package,
+        "repository": args.repo,
         "stable_locale": args.stable_locale,
         "fallback_locale": args.fallback_locale,
         "major_os": args.major_os,

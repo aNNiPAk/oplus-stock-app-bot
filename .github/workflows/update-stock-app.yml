@@ -84,8 +84,13 @@ jobs:
           ARGS=(--package "$PACKAGE_NAME" --stable-locale "$STABLE_LOCALE"
             --fallback-locale "$FALLBACK_LOCALE" --major-os "$MAJOR_OS"
             --max-donors "$MAX_DONORS" --repo "$GITHUB_REPOSITORY")
-          if [[ "$DRY_RUN" == "true" ]]; then ARGS+=(--dry-run); fi
+          ARGS+=(--dry-run)
           python scripts/oplus_multi_donor.py "${ARGS[@]}"
+      - name: Publish verified dry-run selection
+        if: inputs.dry_run == false && github.repository != 'aNNiPAk/oplus-stock-app-bot'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/publish_multi_report.py .work/report.json
       - name: Upload donor scan report
         if: always()
         uses: actions/upload-artifact@v4
