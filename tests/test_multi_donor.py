@@ -62,6 +62,9 @@ class MultiDonorTests(unittest.TestCase):
     def test_release_listing_reads_all_pages_and_ignores_drafts(self):
         pages = [[{"tag_name": "v16-12", "prerelease": True}],
                  [{"tag_name": "v16-30", "draft": True}, {"tag_name": "v16-20"}]]
+        for page in pages:
+            for release in page:
+                release["assets"] = [{"name": "a.apk", "size": 1, "state": "uploaded"}]
         with patch.object(multi, "run", return_value=subprocess.CompletedProcess([], 0, json.dumps(pages), "")):
             self.assertEqual(multi.current_release_codes("repo"), (20, 12))
 
@@ -85,6 +88,35 @@ class MultiDonorTests(unittest.TestCase):
                 args = run.call_args.args[0]
                 self.assertIn("--prerelease", args)
                 self.assertIn("--latest=false", args)
+
+    def test_empty_or_pending_release_is_not_current_version(self):
+        pages = [[{"tag_name": "v1-100", "assets": []},
+                  {"tag_name": "v1-90", "assets": [{"name": "a.apk", "size": 5, "state": "new"}]},
+                  {"tag_name": "v1-20", "assets": [{"name": "a.apk", "size": 5, "state": "uploaded"}]}]]
+        with patch.object(multi, "run", return_value=subprocess.CompletedProcess([], 0, json.dumps(pages), "")):
+            self.assertEqual(multi.current_release_codes("repo"), (20, 0))
+
+    def test_failed_draft_upload_is_not_published_and_can_be_retried(self):
+        state = subprocess.CompletedProcess([], 0, json.dumps({"isDraft": True, "assets": []}), "")
+        failure = subprocess.CalledProcessError(1, ["gh", "release", "upload"])
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(multi, "WORK", Path(directory)), \
+                 patch.object(multi, "release_exists", return_value=True), \
+                 patch.object(multi, "run", side_effect=[state, failure]) as run:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    multi.publish_candidate(self.candidate(30), "repo", prerelease=False, dry_run=False)
+                self.assertEqual(run.call_count, 2)
+                self.assertEqual(run.call_args.args[0][2], "upload")
+
+    def test_existing_draft_is_resumed_and_published(self):
+        state = subprocess.CompletedProcess([], 0, json.dumps({"isDraft": True, "assets": []}), "")
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(multi, "WORK", Path(directory)), \
+                 patch.object(multi, "release_exists", return_value=True), \
+                 patch.object(multi, "run", side_effect=[state, None, None]) as run:
+                result = multi.publish_candidate(self.candidate(30), "repo", prerelease=False, dry_run=False)
+                self.assertEqual(result["status"], "published")
+                self.assertIn("--draft=false", run.call_args.args[0])
 
 
 if __name__ == "__main__":
