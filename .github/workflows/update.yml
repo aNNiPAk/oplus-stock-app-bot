@@ -6,6 +6,8 @@ on:
     paths:
       - config.json
       - scripts/oplus_release_bot.py
+      - scripts/dump_payload.py
+      - tests/**
       - .github/workflows/update.yml
   workflow_call:
     inputs:

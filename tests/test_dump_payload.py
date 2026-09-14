@@ -20,7 +20,7 @@ class SignedURLTests(unittest.TestCase):
             with zipfile.ZipFile(archive, "w", zipfile.ZIP_STORED) as output:
                 output.writestr("payload.bin", payload)
             signed_url = "https://example.org/ota.zip?sign=test&t=123"
-            with patch("payload_dumper.source.HttpSource", return_value=FileSource(str(archive))) as source_factory:
+            with patch.object(adapter, "RangeHttpSource", return_value=FileSource(str(archive))) as source_factory:
                 source = adapter.open_ota_source(signed_url)
                 try:
                     self.assertEqual(source.read_at(0, len(payload)), payload)
@@ -33,9 +33,31 @@ class SignedURLTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "payload.bin"
             path.write_bytes(b"CrAUdirect payload")
-            with patch("payload_dumper.source.HttpSource", return_value=FileSource(str(path))):
+            with patch.object(adapter, "RangeHttpSource", return_value=FileSource(str(path))):
                 source = adapter.open_ota_source("https://example.org/download?sign=test")
                 try:
                     self.assertEqual(source.read_at(0, 4), b"CrAU")
                 finally:
                     source.close()
+
+    def test_content_range_size_overrides_slice_content_length(self):
+        import httpx
+        data = b"CrAU" + bytes(range(100))
+
+        def respond(request):
+            start, end = map(int, request.headers["Range"].removeprefix("bytes=").split("-"))
+            return httpx.Response(206, headers={"Content-Range": f"bytes {start}-{end}/{len(data)}"}, content=data[start:end + 1])
+
+        client = httpx.Client(transport=httpx.MockTransport(respond))
+        source = adapter.RangeHttpSource("https://example.org/ota.zip?sign=test", client=client)
+        try:
+            self.assertEqual(source.size(), len(data))
+            self.assertEqual(source.read_at(80, 10), data[80:90])
+        finally:
+            source.close()
+
+    def test_server_ignoring_range_is_rejected(self):
+        import httpx
+        client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, content=b"entire archive")))
+        with self.assertRaisesRegex(Exception, "ignored HTTP Range"):
+            adapter.RangeHttpSource("https://example.org/ota.zip", client=client)
