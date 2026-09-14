@@ -13,6 +13,24 @@ spec.loader.exec_module(bot)
 
 
 class BotTests(unittest.TestCase):
+    def test_google_messages_is_not_an_oplus_candidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Messages.apk").touch()
+            candidates = {}
+            with patch.object(bot, "parse_apk", return_value=("com.google.android.apps.messaging", "1", 1)), patch.object(bot, "apk_certificate") as cert, patch.dict(bot.os.environ, {"INVENTORY": "false"}):
+                bot.scan_partition(root, "my_stock", {"com.android.mms": {"required_vendor": "oplus"}}, candidates, [])
+                self.assertEqual(candidates, {})
+                cert.assert_not_called()
+
+    def test_messages_without_oplus_manifest_evidence_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Mms.apk").touch()
+            with patch.object(bot, "parse_apk", return_value=("com.android.mms", "1", 1)), patch.object(bot, "run", return_value=subprocess.CompletedProcess([], 0, "com.android.mms", "")), patch.dict(bot.os.environ, {"INVENTORY": "false"}):
+                with self.assertRaisesRegex(RuntimeError, "no OPlus vendor evidence"):
+                    bot.scan_partition(root, "my_stock", {"com.android.mms": {"required_vendor": "oplus"}}, {}, [])
+
     def test_unknown_channel_is_rejected(self):
         with patch.dict(bot.os.environ, {"APP_REPOSITORY": "oplus-unknown"}):
             with self.assertRaisesRegex(ValueError, "Unknown APP_REPOSITORY"):
