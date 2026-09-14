@@ -32,6 +32,32 @@ def fetch_json(url):
         time.sleep(2 ** (attempt + 1))
 
 
+def fetch_manifest(metadata):
+    # Download the JSON as a release asset, not as a GitHub web JSON route.
+    # Public assets need no token; do not forward credentials to CDN redirects.
+    api_url = metadata.get("url")
+    if not api_url:
+        return fetch_json(metadata["browser_download_url"])
+    for attempt in range(3):
+        try:
+            request = urllib.request.Request(api_url, headers={
+                "Accept": "application/octet-stream", "User-Agent": "OPlusStockAppBot/2.0"})
+            with urllib.request.urlopen(request, timeout=45) as response:
+                data = json.load(response)
+            if not isinstance(data, dict) or "apps" not in data:
+                raise RuntimeError("Release asset API did not return a suite manifest")
+            return data
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (429, 500, 502, 503, 504) or attempt == 2:
+                raise
+            multi.log(f"Manifest asset HTTP {exc.code}; retry {attempt + 1}/2")
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 2:
+                raise
+            multi.log(f"Manifest asset network timeout; retry {attempt + 1}/2")
+        time.sleep(2 ** (attempt + 1))
+
+
 def latest_bundle():
     releases = fetch_json(f"https://api.github.com/repos/{CENTRAL}/releases?per_page=100")
     bundles = [r for r in releases if not r["draft"] and r["prerelease"] and r["tag_name"].startswith("suite-")]
@@ -54,7 +80,7 @@ def check_update(package):
     metadata = next((a for a in release["assets"] if a["name"] == "suite-manifest.json" and a["state"] == "uploaded"), None)
     if not metadata:
         raise RuntimeError("Suite bundle has no manifest")
-    report = channel_report(fetch_json(metadata["browser_download_url"]), package, os.environ["GITHUB_REPOSITORY"])
+    report = channel_report(fetch_manifest(metadata), package, os.environ["GITHUB_REPOSITORY"])
     stable, experimental = multi.current_release_codes(report["repository"])
     changed = any(data and data["version_code"] > (stable if channel == "stable" else max(stable, experimental))
                   for channel, data in report["selection"].items())
@@ -78,7 +104,7 @@ def consume(package, dry_run=False):
     metadata = assets.get("suite-manifest.json")
     if not metadata:
         raise RuntimeError("Suite bundle has no manifest")
-    manifest = fetch_json(metadata["browser_download_url"])
+    manifest = fetch_manifest(metadata)
     report = channel_report(manifest, package, os.environ["GITHUB_REPOSITORY"])
     multi.STAGED.mkdir(parents=True, exist_ok=True)
     stable, experimental = multi.current_release_codes(report["repository"])
