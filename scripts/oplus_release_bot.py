@@ -40,6 +40,10 @@ PACKAGE_RE = re.compile(
 )
 
 CERT_RE = re.compile(r"^Signer #1 certificate SHA-256 digest:\s*(.+)$", re.MULTILINE)
+SDK_CERT_RE = re.compile(
+    r"^Signer \(minSdkVersion=(\d+)(?: \(dev release=true\))?, maxSdkVersion=(\d+)\) "
+    r"certificate SHA-256 digest:\s*([0-9a-fA-F]{64})$", re.MULTILINE
+)
 
 
 @dataclass
@@ -377,15 +381,29 @@ def parse_apk(apk: Path) -> tuple[str, str, int]:
     return package, version_name, int(version_code_match.group(0))
 
 
+def parse_signing_certificate(output: str) -> str:
+    sdk_signers = SDK_CERT_RE.findall(output)
+    if sdk_signers:
+        newest_min_sdk = max(int(signer[0]) for signer in sdk_signers)
+        digests = {signer[2].lower() for signer in sdk_signers if int(signer[0]) == newest_min_sdk}
+        if len(digests) != 1:
+            raise RuntimeError("Ambiguous signing certificates for the newest SDK range")
+        return digests.pop()
+    match = CERT_RE.search(output)
+    if match and re.fullmatch(r"[0-9a-fA-F]{64}", match.group(1).strip()):
+        return match.group(1).strip().lower()
+    raise RuntimeError("No signing certificate in apksigner output")
+
+
 def apk_certificate(apk: Path) -> str:
     result = run(
         ["apksigner", "verify", "--print-certs", str(apk)],
         capture=True,
     )
-    match = CERT_RE.search(result.stdout or "")
-    if not match:
+    try:
+        return parse_signing_certificate(result.stdout or "")
+    except RuntimeError:
         raise RuntimeError(f"Could not read signing certificate: {apk}; apksigner output: {result.stdout}; stderr: {result.stderr}")
-    return match.group(1).strip().lower()
 
 
 def sha256_file(path: Path) -> str:

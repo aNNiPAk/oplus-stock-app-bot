@@ -13,6 +13,18 @@ spec.loader.exec_module(bot)
 
 
 class BotTests(unittest.TestCase):
+    def test_rotated_signer_uses_newest_sdk_certificate(self):
+        old = "a" * 64
+        current = "b" * 64
+        lines = [f"Signer (minSdkVersion=28, maxSdkVersion=32) certificate SHA-256 digest: {old}",
+                 f"Signer (minSdkVersion=33, maxSdkVersion=2147483647) certificate SHA-256 digest: {current}"]
+        for output in ("\n".join(lines), "\n".join(reversed(lines))):
+            self.assertEqual(bot.parse_signing_certificate(output), current)
+
+    def test_source_stamp_is_not_app_signing_certificate(self):
+        with self.assertRaisesRegex(RuntimeError, "No signing certificate"):
+            bot.parse_signing_certificate("Source Stamp Signer certificate SHA-256 digest: " + "a" * 64)
+
     def test_google_messages_is_not_an_oplus_candidate(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
