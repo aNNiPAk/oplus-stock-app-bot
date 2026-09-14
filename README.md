@@ -37,28 +37,21 @@ scripts/bootstrap_target_repos.sh private
 
 Можно передать `public`, но системные APK являются проприетарными файлами производителя: перед публичной публикацией стоит проверить условия их распространения. Для личного Obtainium-канала private repositories безопаснее с точки зрения распространения.
 
-## 2. Token для GitHub Actions
+## 2. Публикация без отдельного токена
 
-В центральном bot-репозитории добавьте Actions secret:
+В `aNNiPAk/oplus-calendar` установлен workflow, который вызывает reusable workflow этого bot-репозитория. Код извлекается из `aNNiPAk/oplus-stock-app-bot`, а встроенный `GITHUB_TOKEN` принадлежит `oplus-calendar` и имеет `Contents: write` для публикации его релизов.
 
-`RELEASE_TOKEN`
-
-Это fine-grained GitHub PAT с доступом к целевым репозиториям и правом **Contents: Read and write**.
-
-Если все releases публикуются в текущий repository, встроенного `GITHUB_TOKEN` достаточно, но стандартная конфигурация использует отдельные repositories.
+Для текущего приложения PAT и секрет `RELEASE_TOKEN` не нужны.
 
 ## 3. Запуск
 
-Workflow:
+Проверка: `oplus-calendar → Actions → Update OPlus Calendar → Run workflow`, оставить `dry_run = true`.
 
-`Actions → Update OPlus stock apps → Run workflow`
+Публикация: тот же workflow с `dry_run = false`. Также workflow календаря выполняет обновление каждый день.
 
-Поля необязательны:
+В bot-репозитории изменения кода, конфигурации и workflow запускают dry-run. Поле `ota_url_override` позволяет указать прямой Full OTA URL вместо автоматического поиска.
 
-- `ota_url_override` — прямой Full OTA URL, если нужно временно обойти автоматический catalog lookup.
-- `dry_run` — извлечь APK, сравнить версию и подпись, но не создавать Release.
-
-Также workflow запускается автоматически каждый день.
+Опциональный `RELEASE_TOKEN` нужен только при запуске публикации из bot-репозитория в другой repository. Он должен иметь `Contents: Read and write` для target repository.
 
 ## 4. Автоматический поиск OTA
 

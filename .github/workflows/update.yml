@@ -7,8 +7,19 @@ on:
       - config.json
       - scripts/oplus_release_bot.py
       - .github/workflows/update.yml
-  schedule:
-    - cron: "23 4 * * *"
+  workflow_call:
+    inputs:
+      ota_url_override:
+        required: false
+        type: string
+        default: ""
+      dry_run:
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      RELEASE_TOKEN:
+        required: false
   workflow_dispatch:
     inputs:
       ota_url_override:
@@ -26,7 +37,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   update:
@@ -36,6 +47,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          repository: aNNiPAk/oplus-stock-app-bot
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
