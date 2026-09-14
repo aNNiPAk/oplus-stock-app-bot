@@ -127,9 +127,17 @@ def scan_donor(donor, packages, config, deep_scan=False):
             root = extract_once(donor, partition)
             if root is None:
                 continue
-            # Parse each APK once and distribute all matching packages.
+            # Parse each APK once; collect overlay diagnostics from this
+            # already extracted partition without extra downloads.
+            overlay_index = {}
             for apk in root.rglob("*.apk"):
                 badging = multi.aapt_badging(apk)
+                if "overlay" in apk.as_posix().lower():
+                    target = multi.overlay_target(apk)
+                    if target in packages:
+                        names, locales = overlay_index.setdefault(target, ([], set()))
+                        names.append(f"{partition}/{apk.relative_to(root).as_posix()}")
+                        locales.update(multi.parse_locales(badging))
                 parsed = multi.parse_package_line(badging)
                 if not parsed or parsed[0] not in packages or parsed[0] in found:
                     continue
@@ -140,6 +148,12 @@ def scan_donor(donor, packages, config, deep_scan=False):
                     multi.log(f"Candidate {candidate.package}: {candidate.version_name} ({candidate.version_code}), {candidate.classification}")
                 except Exception as exc:
                     errors.append(f"{partition}/{apk.name}: {exc}")
+            for candidate in result:
+                diagnostics = overlay_index.get(candidate.package)
+                if diagnostics:
+                    names, locales = diagnostics
+                    candidate.overlays = sorted(set(candidate.overlays + names))
+                    candidate.overlay_locales = sorted(set(candidate.overlay_locales) | locales)
         except Exception as exc:
             errors.append(f"{partition}: {type(exc).__name__}: {exc}")
             multi.log(f"Partition unavailable: {partition}: {type(exc).__name__}")
