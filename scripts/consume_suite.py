@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Download one channel's verified selection from the public suite bundle."""
+import argparse
+import json
+import os
+import shutil
+import sys
+import urllib.request
+from pathlib import Path
+
+import oplus_multi_donor as multi
+from publish_multi_report import publish_report, verified_candidate
+
+CENTRAL = "aNNiPAk/oplus-stock-app-bot"
+
+
+def latest_bundle():
+    releases = multi.http_json(f"https://api.github.com/repos/{CENTRAL}/releases?per_page=100")
+    bundles = [r for r in releases if not r["draft"] and r["prerelease"] and r["tag_name"].startswith("suite-")]
+    if not bundles:
+        raise RuntimeError("No completed suite bundle exists yet; run the central suite workflow first")
+    return max(bundles, key=lambda r: r["published_at"])
+
+
+def channel_report(manifest, package, repository):
+    app = manifest.get("apps", {}).get(package)
+    if manifest.get("status") != "ok" or not app or app.get("status") != "ok":
+        raise RuntimeError("Bundle has no successful selection for this package")
+    if app["repository"] != repository or app["package"] != package:
+        raise RuntimeError("Bundle package does not belong to this repository")
+    return json.loads(json.dumps(app))
+
+
+def consume(package, dry_run=False):
+    release = latest_bundle()
+    assets = {a["name"]: a for a in release["assets"] if a["state"] == "uploaded"}
+    metadata = assets.get("suite-manifest.json")
+    if not metadata:
+        raise RuntimeError("Suite bundle has no manifest")
+    manifest = multi.http_json(metadata["browser_download_url"])
+    report = channel_report(manifest, package, os.environ["GITHUB_REPOSITORY"])
+    multi.STAGED.mkdir(parents=True, exist_ok=True)
+    stable, experimental = multi.current_release_codes(report["repository"])
+    for channel in ("stable", "experimental"):
+        data = report["selection"].get(channel)
+        if not data:
+            continue
+        threshold = stable if channel == "stable" else max(stable, experimental)
+        if data["version_code"] <= threshold:
+            report["selection"][channel] = None
+            multi.log(f"{channel}: already up to date")
+            continue
+        name = data["apk_path"]
+        if Path(name).name != name or name not in assets:
+            raise RuntimeError("Invalid or missing bundle APK asset")
+        apk = multi.STAGED / name
+        with urllib.request.urlopen(assets[name]["browser_download_url"], timeout=120) as response, apk.open("wb") as output:
+            shutil.copyfileobj(response, output)
+        data["apk_path"] = str(apk)
+        verified_candidate(data, package, "ru", "en")
+    report["bundle_tag"] = release["tag_name"]
+    multi.REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    multi.REPORT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2))
+    if dry_run:
+        multi.log("Channel dry-run verified; no OTA extraction or publication")
+        return 0
+    return publish_report(multi.REPORT_PATH)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--package", required=True)
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+    try:
+        sys.exit(consume(args.package, args.dry_run))
+    except Exception as exc:
+        multi.log(f"CHANNEL ERROR: {exc}")
+        sys.exit(1)

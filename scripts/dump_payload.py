@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import re
+import os
 import threading
 from collections import OrderedDict
 
@@ -72,10 +73,21 @@ class RangeHttpSource(ByteSource):
         return int(match[3])
 
     def _fetch(self, start: int, end: int) -> bytes:
-        with self._client.stream("GET", self._url, headers={"Range": f"bytes={start}-{end}"}) as response:
-            if self._check_range(response, start, end) != self._size:
-                raise SourceError("OTA archive size changed while extracting")
-            data = response.read()
+        import httpx
+        for attempt in range(2):
+            try:
+                with self._client.stream("GET", self._url, headers={"Range": f"bytes={start}-{end}"}) as response:
+                    if self._check_range(response, start, end) != self._size:
+                        raise SourceError("OTA archive size changed while extracting")
+                    data = response.read()
+                break
+            except httpx.HTTPStatusError as exc:
+                source = os.environ.get("OPLUS_OTA_SOURCE")
+                if attempt or exc.response.status_code not in (401, 403) or not source:
+                    raise
+                import oplus_release_bot
+                self._url = oplus_release_bot.resolve_download_url(source, attempts=2)
+                print("OTA URL refreshed; retrying current range without restarting partition", flush=True)
         if len(data) != end - start + 1:
             raise SourceError("OTA server returned a truncated range")
         self._requests += 1

@@ -1,0 +1,74 @@
+name: Update stock suite
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/suite.yml]
+  schedule:
+    - cron: '3 0,6,12,18 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Verify all apps without publishing the handoff bundle
+        type: boolean
+        default: true
+      max_donors:
+        description: Donor pool size
+        type: choice
+        options: ["3", "6"]
+        default: "6"
+      deep_scan:
+        description: Search additional large partitions if apps are absent
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: stock-suite
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: android-actions/setup-android@v3
+      - name: Install tools and test
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "build-tools;35.0.0"
+          echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends erofs-utils e2fsprogs android-sdk-libsparse-utils file
+          python -m pip install "android-payload-dumper==2.3.0"
+          python -m compileall -q scripts tests
+          python -m unittest discover -s tests -v
+      - uses: actions/cache@v4
+        with:
+          path: .work/donor-cache
+          key: donor-v1-${{ hashFiles('scripts/oplus_suite.py', 'scripts/oplus_multi_donor.py', 'scripts/dump_payload.py', 'config/donors.json', 'config.json') }}-${{ github.run_id }}
+          restore-keys: |
+            donor-v1-${{ hashFiles('scripts/oplus_suite.py', 'scripts/oplus_multi_donor.py', 'scripts/dump_payload.py', 'config/donors.json', 'config.json') }}-
+      - name: Single OTA pass for all seven apps
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          MAX_DONORS: ${{ inputs.max_donors || '6' }}
+          DEEP_SCAN: ${{ inputs.deep_scan || false }}
+        run: |
+          set -euo pipefail
+          ARGS=(--max-donors "$MAX_DONORS")
+          if [[ "$DRY_RUN" == "true" ]]; then ARGS+=(--dry-run); fi
+          if [[ "$DEEP_SCAN" == "true" ]]; then ARGS+=(--deep-scan); fi
+          python scripts/oplus_suite.py "${ARGS[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stock-suite-report
+          path: .work/suite-report.json
+          retention-days: 30

@@ -1,0 +1,49 @@
+name: Publish channel from stock suite
+on:
+  workflow_call:
+    inputs:
+      package_name:
+        required: true
+        type: string
+      dry_run:
+        type: boolean
+        default: true
+permissions:
+  contents: write
+concurrency:
+  group: suite-channel-${{ inputs.package_name }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: aNNiPAk/oplus-stock-app-bot
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: android-actions/setup-android@v3
+      - name: Install verification tools
+        run: |
+          set -euo pipefail
+          sdkmanager "build-tools;35.0.0"
+          echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
+      - name: Download and verify channel selection
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_NAME: ${{ inputs.package_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          ARGS=(--package "$PACKAGE_NAME")
+          if [[ "$DRY_RUN" == "true" ]]; then ARGS+=(--dry-run); fi
+          python scripts/consume_suite.py "${ARGS[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: suite-channel-report
+          path: .work/report.json
+          retention-days: 30

@@ -127,3 +127,30 @@ class BufferedRangeTests(unittest.TestCase):
             206, headers={"Content-Range": "bytes 0-1023/99999"}, content=b"x" * 1024)))
         with self.assertRaisesRegex(Exception, "size changed"):
             source.read_at(0, 10)
+
+    def test_expired_url_refreshes_current_block_and_preserves_cache(self):
+        import httpx
+        import os
+        import oplus_release_bot
+        data = bytes(range(256)) * 20
+        urls = []
+        def respond(request):
+            start, end = map(int, request.headers["Range"].removeprefix("bytes=").split("-"))
+            urls.append(str(request.url))
+            if start == 1024 and str(request.url).endswith("/old"):
+                return httpx.Response(403)
+            return httpx.Response(206, headers={"Content-Range": f"bytes {start}-{end}/{len(data)}"},
+                                  content=data[start:end + 1])
+        source = adapter.RangeHttpSource("https://example.org/old", client=httpx.Client(transport=httpx.MockTransport(respond)))
+        source._block_size = 1024
+        try:
+            self.assertEqual(source.read_at(0, 10), data[:10])
+            with patch.dict(os.environ, {"OPLUS_OTA_SOURCE": "gate-url"}), \
+                 patch.object(oplus_release_bot, "resolve_download_url", return_value="https://example.org/fresh") as refresh:
+                self.assertEqual(source.read_at(1024, 10), data[1024:1034])
+                refresh.assert_called_once_with("gate-url", attempts=2)
+            count = len(urls)
+            self.assertEqual(source.read_at(0, 10), data[:10])
+            self.assertEqual(len(urls), count)
+        finally:
+            source.close()
