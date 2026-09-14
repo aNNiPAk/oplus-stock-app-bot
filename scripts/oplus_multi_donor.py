@@ -605,6 +605,9 @@ def current_release_codes(repo: str) -> tuple[int, int]:
     for release in (release for page in pages for release in page):
         if release.get("draft"):
             continue
+        if not any(asset.get("state") == "uploaded" and asset.get("size", 0) > 0
+                   and asset.get("name", "").endswith(".apk") for asset in release.get("assets", [])):
+            continue
         match = re.search(r"-(\d+)(?:-exp)?$", str(release.get("tag_name") or ""))
         if match:
             code = int(match.group(1))
@@ -694,32 +697,38 @@ def publish_candidate(
         "candidate": public_candidate(candidate),
     }
 
-    if release_exists(repo, tag):
-        outcome["status"] = "already-exists"
-        return outcome
+    exists = release_exists(repo, tag)
+    state = None
+    if exists:
+        state = json.loads(run(["gh", "release", "view", tag, "--repo", repo,
+                               "--json", "isDraft,assets"], capture=True).stdout)
+        complete = any(asset.get("state") == "uploaded" and asset.get("size", 0) > 0
+                       and asset.get("name", "").endswith(".apk") for asset in state["assets"])
+        if not state["isDraft"] and complete:
+            outcome["status"] = "already-exists"
+            return outcome
 
     if dry_run:
         outcome["status"] = "would-publish"
         return outcome
 
-    args = [
-        "gh",
-        "release",
-        "create",
-        tag,
-        candidate.apk_path,
-        "--repo",
-        repo,
-        "--title",
-        title,
-        "--notes-file",
-        str(notes_path),
-    ]
+    if exists:
+        if not state["isDraft"]:
+            run(["gh", "release", "edit", tag, "--repo", repo, "--draft=true"])
+        run(["gh", "release", "upload", tag, candidate.apk_path, "--repo", repo, "--clobber"])
+    else:
+        args = ["gh", "release", "create", tag, candidate.apk_path, "--repo", repo,
+                "--title", title, "--notes-file", str(notes_path), "--draft"]
+        if prerelease:
+            args.append("--prerelease")
+        run(args)
+    # Publish only after the upload succeeded. Drafts remain repairable.
+    args = ["gh", "release", "edit", tag, "--repo", repo, "--draft=false",
+            "--title", title, "--notes-file", str(notes_path)]
     if prerelease:
         args.extend(["--prerelease", "--latest=false"])
     else:
-        args.append("--latest")
-
+        args.extend(["--prerelease=false", "--latest"])
     run(args)
     outcome["status"] = "published"
     return outcome
