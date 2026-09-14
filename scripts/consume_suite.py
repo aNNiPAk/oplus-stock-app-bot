@@ -31,6 +31,29 @@ def channel_report(manifest, package, repository):
     return json.loads(json.dumps(app))
 
 
+def check_update(package):
+    release = latest_bundle()
+    metadata = next((a for a in release["assets"] if a["name"] == "suite-manifest.json" and a["state"] == "uploaded"), None)
+    if not metadata:
+        raise RuntimeError("Suite bundle has no manifest")
+    report = channel_report(multi.http_json(metadata["browser_download_url"]), package, os.environ["GITHUB_REPOSITORY"])
+    stable, experimental = multi.current_release_codes(report["repository"])
+    changed = any(data and data["version_code"] > (stable if channel == "stable" else max(stable, experimental))
+                  for channel, data in report["selection"].items())
+    output = os.environ.get("GITHUB_OUTPUT")
+    if output:
+        with open(output, "a") as stream:
+            stream.write(f"changed={str(changed).lower()}\n")
+    if not changed:
+        report["selection"] = {"stable": None, "experimental": None}
+        report["bundle_tag"] = release["tag_name"]
+        report["releases"] = [{"status": "up-to-date"}]
+        multi.REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        multi.REPORT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2))
+    multi.log(f"Channel needs new APK: {changed}")
+    return 0
+
+
 def consume(package, dry_run=False):
     release = latest_bundle()
     assets = {a["name"]: a for a in release["assets"] if a["state"] == "uploaded"}
@@ -71,9 +94,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--package", required=True)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--check-only", action="store_true")
     args = parser.parse_args()
     try:
-        sys.exit(consume(args.package, args.dry_run))
+        sys.exit(check_update(args.package) if args.check_only else consume(args.package, args.dry_run))
     except Exception as exc:
         multi.log(f"CHANNEL ERROR: {exc}")
         sys.exit(1)
