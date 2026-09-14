@@ -95,9 +95,14 @@ def extract_once(donor, partition):
     # No restart from zero on a failed download; the adapter refreshes expired
     # URLs at the current range. A failed partition is not "package absent".
     multi.log(f"Extracting {donor.device}/{donor.region}: {partition}")
-    subprocess.run([sys.executable, str(multi.ROOT / "scripts" / "dump_payload.py"),
-        direct, "-p", partition, "-o", str(directory), "-j", "1"],
-        check=True, timeout=600, env=env)
+    try:
+        subprocess.run([sys.executable, str(multi.ROOT / "scripts" / "dump_payload.py"),
+            direct, "-p", partition, "-o", str(directory), "-j", "1"],
+            check=True, timeout=600, env=env)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("OTA partition extraction exceeded 600 seconds") from None
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"OTA partition extraction failed with exit code {exc.returncode}") from None
     image = directory / f"{partition}.img"
     if not image.is_file() or image.stat().st_size == 0:
         return None
