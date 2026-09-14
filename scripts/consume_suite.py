@@ -7,6 +7,7 @@ import shutil
 import sys
 import time
 import urllib.error
+from urllib.parse import urlsplit
 import urllib.request
 from pathlib import Path
 
@@ -23,7 +24,7 @@ def fetch_json(url):
         except urllib.error.HTTPError as exc:
             if exc.code not in (429, 500, 502, 503, 504) or attempt == 2:
                 raise
-            multi.log(f"Metadata HTTP {exc.code}; retry {attempt + 1}/2")
+            multi.log(f"Metadata HTTP {exc.code} from {urlsplit(url).hostname}; retry {attempt + 1}/2")
         except (urllib.error.URLError, TimeoutError):
             if attempt == 2:
                 raise
