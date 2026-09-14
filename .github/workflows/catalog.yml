@@ -1,0 +1,28 @@
+name: Inspect OTA catalog
+on:
+  push:
+    paths: [.github/workflows/catalog.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: List catalog sources
+        run: |
+          python - <<'PY'
+          import importlib.util, sys, json
+          spec = importlib.util.spec_from_file_location("bot", "scripts/oplus_release_bot.py")
+          bot = importlib.util.module_from_spec(spec)
+          sys.modules["bot"] = bot
+          spec.loader.exec_module(bot)
+          entries = bot.collect_catalog_entries(bot.http_json(bot.CATALOG_API + "?latest=1"))
+          for entry in entries:
+              print("CATALOG " + json.dumps({k:entry.get(k) for k in ("model","device","region","version")}))
+          PY
