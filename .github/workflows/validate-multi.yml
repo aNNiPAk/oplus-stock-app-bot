@@ -1,0 +1,19 @@
+name: Validate multi-donor OTA extraction
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/oplus_multi_donor.py
+      - config/donors.json
+      - .github/workflows/update-stock-app.yml
+      - .github/workflows/validate-multi.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  dry-run:
+    uses: aNNiPAk/oplus-stock-app-bot/.github/workflows/update-stock-app.yml@main
+    with:
+      package_name: com.oplus.calendar
+      max_donors: 6
+      dry_run: true

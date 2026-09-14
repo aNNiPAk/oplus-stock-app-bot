@@ -1,0 +1,95 @@
+name: OPlus multi-donor updater
+on:
+  workflow_call:
+    inputs:
+      package_name:
+        required: true
+        type: string
+      stable_locale:
+        required: false
+        type: string
+        default: ru
+      fallback_locale:
+        required: false
+        type: string
+        default: en
+      major_os:
+        required: false
+        type: string
+        default: "16"
+      max_donors:
+        required: false
+        type: number
+        default: 6
+      dry_run:
+        required: false
+        type: boolean
+        default: true
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: Android package to inspect
+        required: true
+        default: com.oplus.calendar
+        type: string
+      max_donors:
+        description: Number of donor OTAs (1–12)
+        required: true
+        default: 6
+        type: number
+      dry_run:
+        description: Verify without publishing
+        default: true
+        type: boolean
+permissions:
+  contents: write
+concurrency:
+  group: multi-donor-${{ inputs.package_name }}
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: aNNiPAk/oplus-stock-app-bot
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: android-actions/setup-android@v3
+      - name: Install tools and run regression tests
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "build-tools;35.0.0"
+          echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends erofs-utils e2fsprogs android-sdk-libsparse-utils file
+          python -m pip install "android-payload-dumper==2.3.0"
+          python -m unittest discover -s tests -v
+      - name: Inspect donors and select APK releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_NAME: ${{ inputs.package_name }}
+          STABLE_LOCALE: ${{ inputs.stable_locale || 'ru' }}
+          FALLBACK_LOCALE: ${{ inputs.fallback_locale || 'en' }}
+          MAJOR_OS: ${{ inputs.major_os || '16' }}
+          MAX_DONORS: ${{ inputs.max_donors || 6 }}
+          DRY_RUN: ${{ inputs.dry_run || github.repository == 'aNNiPAk/oplus-stock-app-bot' }}
+          REPORT_PATH: ${{ github.workspace }}/.work/report.json
+        run: |
+          set -euo pipefail
+          ARGS=(--package "$PACKAGE_NAME" --stable-locale "$STABLE_LOCALE"
+            --fallback-locale "$FALLBACK_LOCALE" --major-os "$MAJOR_OS"
+            --max-donors "$MAX_DONORS" --repo "$GITHUB_REPOSITORY")
+          if [[ "$DRY_RUN" == "true" ]]; then ARGS+=(--dry-run); fi
+          python scripts/oplus_multi_donor.py "${ARGS[@]}"
+      - name: Upload donor scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oplus-multidonor-report
+          path: .work/report.json
+          retention-days: 30

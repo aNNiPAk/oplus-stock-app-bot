@@ -1,0 +1,75 @@
+{
+  "catalog_url": "https://roms.danielspringer.at/api/ota.php?latest=1",
+  "device_allow_patterns": [
+    "^OPPO Find X9$",
+    "^OPPO Find X9 Pro$",
+    "^OPPO Find X9 Ultra$",
+    "^OPPO Find X9s$",
+    "^OPPO Find X9s Pro$",
+    "^OnePlus 15$",
+    "^OnePlus 15R$",
+    "^OnePlus 15T$",
+    "^Realme GT8 Pro$",
+    "^Realme 16 Pro\\+$",
+    "^Realme NEO 8$"
+  ],
+  "regions": [
+    "GLO",
+    "EU",
+    "IN",
+    "NA",
+    "APC",
+    "SG",
+    "MY",
+    "TW",
+    "TH",
+    "ID",
+    "VN",
+    "JP",
+    "MX",
+    "CN"
+  ],
+  "vendor_quotas": {
+    "OPPO": 2,
+    "OnePlus": 2,
+    "Realme": 2
+  },
+  "partitions": [
+    "my_product",
+    "product",
+    "my_region",
+    "system_ext",
+    "system",
+    "my_stock",
+    "my_heytap"
+  ],
+  "overlay_partitions": [
+    "my_region",
+    "product",
+    "my_product"
+  ],
+  "package_partitions": {
+    "com.coloros.note": [
+      "my_stock"
+    ],
+    "com.coloros.soundrecorder": [
+      "my_stock"
+    ],
+    "com.coloros.calculator": [
+      "my_stock"
+    ],
+    "com.coloros.weather2": [
+      "my_stock"
+    ],
+    "com.coloros.alarmclock": [
+      "my_stock"
+    ],
+    "com.android.mms": [
+      "my_stock"
+    ],
+    "com.oplus.calendar": [
+      "my_product",
+      "my_stock"
+    ]
+  }
+}
