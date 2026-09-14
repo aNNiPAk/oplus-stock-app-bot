@@ -100,3 +100,34 @@ class SuiteTests(unittest.TestCase):
             (root / "a.apk").write_bytes(b"tampered")
             (root / "candidates.json").write_text(json.dumps([{"apk_path": "a.apk", "apk_sha256": "wrong"}]))
             self.assertIsNone(suite.load_cache(root))
+
+    def test_up_to_date_check_skips_apk_verification_and_writes_false(self):
+        import os
+        manifest = {"status": "ok", "apps": {"a": {"status": "ok", "repository": "owner/a", "package": "a",
+            "selection": {"stable": {"version_code": 2}, "experimental": {"version_code": 4}}}}}
+        release = {"tag_name": "suite-test", "assets": [{"name": "suite-manifest.json", "state": "uploaded", "browser_download_url": "manifest-url"}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "output"
+            with patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/a", "GITHUB_OUTPUT": str(output)}), \
+                 patch.object(consumer, "latest_bundle", return_value=release), \
+                 patch.object(consumer.multi, "http_json", return_value=manifest), \
+                 patch.object(consumer.multi, "current_release_codes", return_value=(10, 11)), \
+                 patch.object(consumer.multi, "REPORT_PATH", Path(tmp) / "report.json"), \
+                 patch.object(consumer, "verified_candidate") as verify:
+                self.assertEqual(consumer.check_update("a"), 0)
+            self.assertEqual(output.read_text(), "changed=false\n")
+            verify.assert_not_called()
+
+    def test_new_version_check_writes_true(self):
+        import os
+        manifest = {"status": "ok", "apps": {"a": {"status": "ok", "repository": "owner/a", "package": "a",
+            "selection": {"stable": {"version_code": 20}, "experimental": None}}}}
+        release = {"tag_name": "suite-test", "assets": [{"name": "suite-manifest.json", "state": "uploaded", "browser_download_url": "manifest-url"}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "output"
+            with patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/a", "GITHUB_OUTPUT": str(output)}), \
+                 patch.object(consumer, "latest_bundle", return_value=release), \
+                 patch.object(consumer.multi, "http_json", return_value=manifest), \
+                 patch.object(consumer.multi, "current_release_codes", return_value=(10, 11)):
+                self.assertEqual(consumer.check_update("a"), 0)
+            self.assertEqual(output.read_text(), "changed=true\n")
