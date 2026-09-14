@@ -25,14 +25,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Check whether channel has a new version
+        id: selection
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_NAME: ${{ inputs.package_name }}
+        run: python scripts/consume_suite.py --package "$PACKAGE_NAME" --check-only
       - uses: android-actions/setup-android@v3
+        if: steps.selection.outputs.changed == 'true'
       - name: Install verification tools
+        if: steps.selection.outputs.changed == 'true'
         run: |
           set -euo pipefail
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "build-tools;35.0.0"
           echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
       - name: Download and verify channel selection
+        if: steps.selection.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PACKAGE_NAME: ${{ inputs.package_name }}
