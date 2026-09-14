@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 import urllib.error
@@ -20,7 +21,13 @@ CENTRAL = "aNNiPAk/oplus-stock-app-bot"
 def fetch_json(url):
     for attempt in range(3):
         try:
+            if urlsplit(url).hostname == "api.github.com" and os.environ.get("GH_TOKEN"):
+                return json.loads(multi.run(["gh", "api", url], capture=True).stdout)
             return multi.http_json(url)
+        except subprocess.CalledProcessError as exc:
+            if attempt == 2 or not any(f"HTTP {code}" in (exc.stderr or "") for code in (429, 500, 502, 503, 504)):
+                raise
+            multi.log(f"GitHub API temporary failure; retry {attempt + 1}/2")
         except urllib.error.HTTPError as exc:
             if exc.code not in (429, 500, 502, 503, 504) or attempt == 2:
                 raise
@@ -40,13 +47,20 @@ def fetch_manifest(metadata):
         return fetch_json(metadata["browser_download_url"])
     for attempt in range(3):
         try:
-            request = urllib.request.Request(api_url, headers={
-                "Accept": "application/octet-stream", "User-Agent": "OPlusStockAppBot/2.0"})
-            with urllib.request.urlopen(request, timeout=45) as response:
-                data = json.load(response)
+            if os.environ.get("GH_TOKEN"):
+                data = json.loads(multi.run(["gh", "api", api_url, "-H", "Accept: application/octet-stream"], capture=True).stdout)
+            else:
+                request = urllib.request.Request(api_url, headers={
+                    "Accept": "application/octet-stream", "User-Agent": "OPlusStockAppBot/2.0"})
+                with urllib.request.urlopen(request, timeout=45) as response:
+                    data = json.load(response)
             if not isinstance(data, dict) or "apps" not in data:
                 raise RuntimeError("Release asset API did not return a suite manifest")
             return data
+        except subprocess.CalledProcessError as exc:
+            if attempt == 2 or not any(f"HTTP {code}" in (exc.stderr or "") for code in (429, 500, 502, 503, 504)):
+                raise
+            multi.log(f"GitHub asset API temporary failure; retry {attempt + 1}/2")
         except urllib.error.HTTPError as exc:
             if exc.code not in (429, 500, 502, 503, 504) or attempt == 2:
                 raise
