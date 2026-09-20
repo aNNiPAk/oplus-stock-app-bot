@@ -37,6 +37,8 @@ jobs:
         with:
           python-version: "3.12"
       - uses: android-actions/setup-android@v3
+        with:
+          packages: ''
       - name: Install tools and test
         run: |
           set -euo pipefail
