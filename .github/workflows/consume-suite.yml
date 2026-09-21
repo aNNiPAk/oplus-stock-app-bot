@@ -33,6 +33,8 @@ jobs:
         run: python scripts/consume_suite.py --package "$PACKAGE_NAME" --check-only
       - uses: android-actions/setup-android@v3
         if: steps.selection.outputs.changed == 'true'
+        with:
+          packages: ''
       - name: Install verification tools
         if: steps.selection.outputs.changed == 'true'
         run: |
